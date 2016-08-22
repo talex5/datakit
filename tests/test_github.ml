@@ -763,18 +763,16 @@ let ensure_in_sync ~msg github pub =
 
 let test_contexts = [|
   ["ci"; "datakit"; "test"];
-(* XXX
   ["ci"; "datakit"; "build"];
   ["ci"; "circleci"];
-*)
 |]
 
 let random_choice ~random options =
   options.(Random.State.int random (Array.length options))
 
 let random_state ~random ~user ~repo ~old_prs ~old_commits =
-  let n_prs = Random.State.int random 4 in
-(*   let n_prs = if (user, repo) = ("a", "a") then 2 else 0 in *)
+(*   let n_prs = Random.State.int random 4 in *)
+  let n_prs = if (user, repo) = ("a", "a") then Random.State.int random 3 else 0 in
   let old_prs = List.rev old_prs in
   let old_commits = String.Map.of_list old_commits in
   let next_pr = ref (
@@ -793,7 +791,7 @@ let random_state ~random ~user ~repo ~old_prs ~old_commits =
       { pr with PR.state; head }
     )
   in
-  let commits = ref String.Set.empty in
+  let commits = ref (String.Map.dom old_commits) in
   let rec make_prs acc = function
     | 0 -> acc
     | n ->
@@ -823,8 +821,8 @@ let random_state ~random ~user ~repo ~old_prs ~old_commits =
                 | exception Not_found -> []
                 | old_status -> [old_status]    (* GitHub can't delete statuses *)
               ) else (
-                (* TODO: random state *)
-                [{ Status.user; repo; state = `Pending; commit; description; url = None; context }]
+                let state = random_choice ~random [| `Pending; `Success; `Failure; `Error |] in
+                [{ Status.user; repo; state; commit; description; url = None; context }]
               )
             )
           |> List.concat
