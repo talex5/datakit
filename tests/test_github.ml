@@ -773,8 +773,8 @@ let random_choice ~random options =
   options.(Random.State.int random (Array.length options))
 
 let random_state ~random ~user ~repo ~old_prs ~old_commits =
-(*   let n_prs = Random.State.int random 4 in *)
-  let n_prs = if (user, repo) = ("a", "a") then 2 else 0 in
+  let n_prs = Random.State.int random 4 in
+(*   let n_prs = if (user, repo) = ("a", "a") then 2 else 0 in *)
   let old_prs = List.rev old_prs in
   let old_commits = String.Map.of_list old_commits in
   let next_pr = ref (
@@ -786,14 +786,14 @@ let random_state ~random ~user ~repo ~old_prs ~old_commits =
   let old_prs = old_prs |> List.map (fun pr ->
       let state =
         match pr.PR.state with
-        | `Open when Random.State.bool random -> `Closed
+(*         | `Open when Random.State.bool random -> `Closed *)  (* TODO: Depends on #235 *)
         | s -> s
       in
       let head = random_choice ~random [| "123"; "456"; "789" |] in
       { pr with PR.state; head }
     )
   in
-  let commits = ref (String.Map.dom old_commits) in
+  let commits = ref String.Set.empty in
   let rec make_prs acc = function
     | 0 -> acc
     | n ->
