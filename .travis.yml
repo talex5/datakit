@@ -7,6 +7,7 @@ env:
   global:
   - EXTRA_DEPS="inotify"
   - PINS="datakit-client:. datakit-server:. datakit-github:. datakit:."
+  - ALCOTEST_SHOW_ERRORS="1"
   matrix:
   - OCAML_VERSION=4.02 PACKAGE="datakit-client"
   - OCAML_VERSION=4.03 PACKAGE="datakit-client"
