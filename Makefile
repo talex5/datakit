@@ -13,7 +13,8 @@ depends:
 	opam pin add datakit-client . -y
 	opam pin add datakit-server . -y
 	opam pin add datakit-github . -y
-	opam update -u datakit-client datakit-server datakit-github -y
+	opam pin add datakit-ci . -y
+	opam update -u datakit-client datakit-server datakit-github datakit-ci -y
 
 datakit:
 	ocaml pkg/pkg.ml build --tests $(TESTS) -q
