@@ -211,20 +211,29 @@ module Term : sig
       It is pending until a successful URL is available. *)
 end
 
+module ACL : sig
+  type t
+
+  val everyone : t
+  val username : string -> t
+  val github_org : string -> t
+
+  val any : t list -> t
+end
+
 module Web : sig
   type config
 
   val config :
     ?name:string ->
     ?state_repo:Uri.t ->
-    public:bool ->
+    can_read:ACL.t ->
+    can_build:ACL.t ->
     unit -> config
-  (** [config ~name ~state_repo ()] is a web configuration.
+  (** [config ~name ~state_repo ~can_read ~can_build ()] is a web configuration.
       If [name] is given, it is used as the main heading, and also as the name of the session cookie
       (useful if you run multiple CIs on the same host, on different ports).
-      If [state_repo] is given, it is used to construct links to the state repository on GitHub.
-      [public] controls whether users who are not logged in can view the site. Performing actions
-      still requires users to log in first. *)
+      If [state_repo] is given, it is used to construct links to the state repository on GitHub. *)
 end
 
 module Config : sig
