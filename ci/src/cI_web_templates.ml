@@ -685,6 +685,11 @@ let iframe_page ~page_title =
 let plain_error msg _t ~user:_ =
   plain_page ~page_title:"Error" (body [pcdata msg])
 
+let highlighted_log data =
+  Ansiparse.Concrete.parse_str data
+  |> Ansiparse.Abstract.parse
+  |> Ansiparse.Html.of_tree
+
 let live_log_frame ~branch ~live_log ~have_history t ~user:_ =
   let buttons =
     if have_history then [history_button (log_branch_history_url t branch)]
@@ -701,7 +706,7 @@ let live_log_frame ~branch ~live_log ~have_history t ~user:_ =
             div ~a:[a_class["btn-group";"pull-right"]] buttons
           ]
         ];
-        pre [pcdata (CI_live_log.contents live_log)];
+        highlighted_log (CI_live_log.contents live_log);
       ]
     )
 
@@ -720,7 +725,7 @@ let saved_log_frame ~commit ~branch ~log_data t ~user:_ =
             log_button_group history log_url;
           ];
         ];
-        pre [pcdata (Cstruct.to_string log_data)];
+        highlighted_log (Cstruct.to_string log_data);
       ]
     )
 

@@ -8,6 +8,7 @@ true: package(tls, channel, conduit.lwt-unix, io-page.unix)
 true: package(pbkdf, sexplib)
 true: package(asetmap)
 true: package(github.unix)
+true: package(ansi-parse)
 
 <src/cI_web_utils.*>: package(ppx_sexp_conv)
 
