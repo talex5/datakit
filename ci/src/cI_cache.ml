@@ -1,6 +1,41 @@
 open CI_utils
 open Lwt.Infix
 
+module Metrics = struct
+  open CI_prometheus
+
+  let namespace = "DataKitCI"
+  let subsystem = "cache"
+
+  let builds_started_total =
+    let help = "Total number of builds started" in
+    let family = Counter.v_labels ~help ~label_names:[|"name"|] ~namespace ~subsystem "builds_started_total" in
+    fun name ->
+      let c = Counter.labels family [| name |] in
+      Counter.inc_one c
+
+  let builds_succeeded_total =
+    let help = "Total number of builds that succeeded" in
+    let family = Counter.v_labels ~help ~label_names:[|"name"|] ~namespace ~subsystem "builds_succeeded_total" in
+    fun name ->
+      let c = Counter.labels family [| name |] in
+      Counter.inc_one c
+
+  let builds_failed_total =
+    let help = "Total number of builds that failed" in
+    let family = Counter.v_labels ~help ~label_names:[|"name"|] ~namespace ~subsystem "builds_failed_total" in
+    fun name ->
+      let c = Counter.labels family [| name |] in
+      Counter.inc_one c
+
+  let build_exceptions_total =
+    let help = "Total number of builds that raised an exception" in
+    let family = Counter.v_labels ~help ~label_names:[|"name"|] ~namespace ~subsystem "build_exceptions_total" in
+    fun name ->
+      let c = Counter.labels family [| name |] in
+      Counter.inc_one c
+end
+
 module Path = struct
   (* Each entry in the cache has a branch in the database:
      - /log contains the build log
@@ -132,6 +167,7 @@ module Make(B : CI_s.BUILDER) = struct
      Mark this entry as in-progress and start generating the new value.
      Must hold the lock while this is called, to insert the pending entry. *)
   let do_build t ~rebuild dk ctx k =
+    Metrics.builds_started_total (B.name t.builder);
     let switch = Lwt_switch.create () in
     let title = B.title t.builder k in
     let branch_name = B.branch t.builder k in
@@ -160,11 +196,13 @@ module Make(B : CI_s.BUILDER) = struct
                   catch (fun () -> B.generate t.builder ~switch ~log trans ctx k) >>= function
                   | Ok x ->
                     CI_live_log.log log "Success";
+                    Metrics.builds_succeeded_total (B.name t.builder);
                     DK.Transaction.create_or_replace_file trans Path.log (Cstruct.of_string (CI_live_log.contents log)) >>*= fun () ->
                     DK.Transaction.commit trans ~message:"Cached successful result" >>*= fun () ->
                     return (Ok x)
                   | Error (`Failure msg) ->
                     CI_live_log.log log "Failed: %s" msg;
+                    Metrics.builds_failed_total (B.name t.builder);
                     DK.Transaction.create_or_replace_file trans Path.log (Cstruct.of_string (CI_live_log.contents log)) >>*= fun () ->
                     DK.Transaction.create_file trans Path.failure (Cstruct.of_string msg) >>*= fun () ->
                     DK.Transaction.commit trans ~message:("Cached failure: " ^ msg) >>*= fun () ->
@@ -182,6 +220,7 @@ module Make(B : CI_s.BUILDER) = struct
            (fun ex ->
               let msg = Printexc.to_string ex in
               Log.err (fun f -> f "Uncaught exception in do_build: %s" msg);
+              Metrics.build_exceptions_total (B.name t.builder);
               finish (Error (`Failure msg), CI_result.Step_log.Empty)
            )
       );
