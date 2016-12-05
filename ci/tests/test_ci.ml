@@ -424,7 +424,8 @@ let test_roles conn =
     let can_read = if public then CI_ACL.everyone else CI_ACL.username "admin" in
     let can_build = CI_ACL.username "admin" in
     let web_config = CI_web_templates.config ~name:"test-ci" ~can_read ~can_build () in
-    let routes = CI_web.routes ~config:web_config ~logs ~auth ~ci ~dashboards:(CI_target.Full.map_of_list []) in
+    CI_web_utils.server ~web_config ~auth ~session_backend:`Memory >|= fun server ->
+    let routes = CI_web.routes ~server ~logs ~ci ~dashboards:(CI_target.Full.map_of_list []) in
     fun ~expect path ->
       let request = Cohttp.Request.make (Uri.make ~path ()) in
       CI_web_utils.Wm.dispatch' routes ~request ~body:`Empty >|= function
@@ -432,8 +433,8 @@ let test_roles conn =
       | Some (code, _header, _body, _path) ->
         Alcotest.(check status_code) "Web response" expect code
   in
-  let test_private_server = server ~public:false in
-  let test_public_server = server ~public:true in
+  server ~public:false >>= fun test_private_server ->
+  server ~public:true >>= fun test_public_server ->
   test_private_server "/" ~expect:`See_other >>= fun () ->
   test_public_server "/" ~expect:`OK
 
