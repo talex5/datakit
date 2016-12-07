@@ -3,7 +3,7 @@ open Asetmap
 type t = private {
   user : string;
   project : string;
-}
+} [@@deriving sexp]
 (** A project on GitHub *)
 
 val v : user:string -> project:string -> t
