@@ -1,11 +1,13 @@
 open Astring
 open Asetmap
+open Sexplib.Std
 
 module ID = struct
   type t = {
     user : string;
     project : string;
-  }
+  } [@@deriving sexp]
+
   let compare a b =
     match String.compare a.user b.user with
     | 0 -> String.compare a.project b.project
