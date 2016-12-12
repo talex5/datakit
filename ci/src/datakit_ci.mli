@@ -136,6 +136,12 @@ module Target: sig
       references contains the head commit and other metadata (see
       {!Datakit_github}'s documentation for more details). *)
 
+  val head: v -> Commit.t
+  (** [head v] is the head commit of [v]. *)
+
+  val compare_v: v -> v -> int
+  (** [compare_v] compares values of type {!v}. *)
+
 end
 
 module Term: sig
@@ -643,8 +649,8 @@ module Private: sig
     include Protocol_9p_client.S
     val connect:
       string -> string ->
-      ?msize:int32 -> ?username:string -> ?aname:string -> unit ->
-      t Protocol_9p_error.t Lwt.t
+      ?msize:int32 -> ?username:string -> ?aname:string -> ?max_fids:int32 ->
+      unit -> t Protocol_9p_error.t Lwt.t
   end
 
   val connect: Client9p.t -> DK.t
