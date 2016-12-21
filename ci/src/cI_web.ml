@@ -4,7 +4,10 @@ open Lwt.Infix
 open CI_utils
 open CI_utils.Infix
 
-let acme_challenge_dir = "/var/run/datakit/acme-challenge"
+let ( / ) = Filename.concat
+
+let acme_web_root = "/var/run/datakit/"
+let acme_challenge_dir = acme_web_root / ".well-known/acme-challenge"
 (* Any token files placed here (e.g. by certbot) will be served at ".well-known/acme-challenge/..." *)
 
 module Wm = CI_web_utils.Wm
@@ -15,6 +18,7 @@ type t = {
   logs : CI_live_log.manager;
   server : CI_web_utils.server;
   dashboards : CI_target.Set.t Repo.Map.t;
+  domains : string list;                (* Domains to pass to certbot *)
 }
 
 class user_page t = object(self)
@@ -247,8 +251,44 @@ let acme_challenge =
   let mime_type _ = Some "application/jose+json" in
   fun () -> new CI_web_utils.static ~valid:url_safe_b64 ~mime_type acme_challenge_dir
 
-let routes ~logs ~ci ~server ~dashboards =
-  let t = { logs; ci; server; dashboards } in
+let run_certbot domains =
+  let cmd = ["certbot"; "certonly";
+              "--preferred-challenges"; "tls-sni";
+              "--webroot"; acme_web_root;
+            ] :: List.map (fun d -> ["-d"; d]) domains
+            |> List.flatten
+  in
+  let log = Buffer.create 1024 in
+  Lwt.catch
+    (fun () -> CI_process.run ~output:(Buffer.add_string log) ("", Array.of_list cmd))
+    (fun ex ->
+       Buffer.add_string log ("\nError running certbot:\n" ^ Printexc.to_string ex);
+       Lwt.return ()
+    )
+  >|= fun () ->
+  Buffer.contents log
+
+class update_cert t = object
+  inherit [unit] CI_web_utils.form_page t.server
+
+  method private required_roles = [`Admin]
+
+  method private render ~csrf_token =
+    CI_web_templates.update_cert_form ~csrf_token
+
+  method private validate = CI_form.Validator.maybe ()
+
+  method private process () rd =
+    run_certbot t.domains >>= fun log ->
+    Wm.continue true
+      { rd with Rd.
+             resp_body = Cohttp_lwt_body.of_string log;
+             resp_headers = Cohttp.Header.add rd.Rd.resp_headers "Content-Type" "text/plain";
+      }
+end
+
+let routes ~logs ~ci ~server ~dashboards ~domains =
+  let t = { logs; ci; server; dashboards; domains } in
   [
     (* Auth *)
     ("auth/intro/:token", fun () -> new CI_web_utils.auth_intro t.server);
@@ -271,12 +311,14 @@ let routes ~logs ~ci ~server ~dashboards =
     ("log/saved/:branch/:commit",               fun () -> new saved_log_page t);
     ("log/rebuild/:branch",                     fun () -> new rebuild t);
     ("cancel/:branch",                          fun () -> new cancel t);
+    (* Admin *)
+    ("config/update-certificate",               fun () -> new update_cert t);
     (* Errors *)
     ("error/:id",       fun () -> new error t);
     (* Reporting *)
     ("metrics",         fun () -> new metrics t);
     (* certbot *)
-    (".well-known/acme-challenge/:file", acme_challenge);
+    (".well-known/acme-challenge/:name", acme_challenge);
     (* Static resources *)
     (":dir/:name",      fun () -> new CI_web_utils.static_crunch ~mime_type CI_static.read);
   ]

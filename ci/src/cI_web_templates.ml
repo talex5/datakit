@@ -407,10 +407,7 @@ let resource_pools ~csrf_token =
 
 let login_page ?github ~csrf_token state ~is_configured t ~user =
   let field = CI_form.Html.field state in
-  let query = [
-    "CSRFToken", [csrf_token];
-  ] in
-  let action = Printf.sprintf "/auth/login?%s" (Uri.encoded_of_query query) in
+  let action = "/auth/login" in
   let github_login =
     match github with
     | None ->
@@ -433,7 +430,7 @@ let login_page ?github ~csrf_token state ~is_configured t ~user =
   in
   page "Login" Nav.Home ~user ([
     h2 [pcdata "Login"];
-    CI_form.Html.form state ~form_class:["login-form"] ~action [
+    CI_form.Html.form ~csrf_token state ~form_class:["login-form"] ~action [
       field "Username" `Text "user";
       field "Password" `Password "password";
       div [button ~a:[a_class ["btn"; "btn-primary"]; a_button_type `Submit] [pcdata "Log in"]];
@@ -443,12 +440,9 @@ let login_page ?github ~csrf_token state ~is_configured t ~user =
 
 let auth_setup ~csrf_token state =
   let field = CI_form.Html.field state in
-  let query = [
-    "CSRFToken", [csrf_token];
-  ] in
-  let action = Printf.sprintf "/auth/setup?%s" (Uri.encoded_of_query query) in
+  let action = "/auth/setup" in
   page "Auth Setup" Nav.Home [
-    CI_form.Html.form state ~form_class:["auth-setup-form"] ~action [
+    CI_form.Html.form state ~csrf_token ~form_class:["auth-setup-form"] ~action [
       div ~a:[a_class ["form-group"]] [
         label ~a:[a_label_for "user"] [pcdata "Username"];
         input ~a:[a_class ["form-control"]; a_id "user"; a_input_type `Text;
@@ -776,6 +770,17 @@ let saved_log_frame ~commit ~branch ~log_data t ~user:_ =
         pre [pcdata (Cstruct.to_string log_data)];
       ]
     )
+
+let update_cert_form ~csrf_token state =
+  let action = "/config/update-certificate" in
+  page "Update server certificate" Nav.Home [
+    div [
+      pcdata "Use this page to request a new X.509 certificate from Let's Encrypt";
+    ];
+    CI_form.Html.form state ~csrf_token ~form_class:["update-cert-form"] ~action [
+      div [button ~a:[a_class ["btn"; "btn-primary"]; a_button_type `Submit] [pcdata "Request certificate"]];
+    ]
+  ]
 
 let error_page id =
   page "Error" Nav.Home (

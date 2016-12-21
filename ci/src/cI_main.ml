@@ -52,9 +52,10 @@ let start_lwt ~pr_store ~web_ui ~secrets_dir ~canaries ~config ~session_backend 
       `Port 8443
     )
   in
+  let domains = [Uri.host_with_default web_ui] in
   let session_backend = make_session_backend session_backend in
   let server = CI_web_utils.server ~web_config ~auth ~session_backend in
-  let routes = CI_web.routes ~server ~logs ~ci ~dashboards in
+  let routes = CI_web.routes ~server ~logs ~ci ~dashboards ~domains in
   Lwt.pick [
     main_thread;
     CI_web_utils.serve ~routes ~mode

@@ -99,6 +99,12 @@ val saved_log_frame :
   t ->
   page
 
+val update_cert_form :
+  csrf_token:string ->
+  CI_form.State.t ->
+  t ->
+  page
+
 (** A basic page just the error text and no header, footer, etc. *)
 val plain_error :
   string ->
