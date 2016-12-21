@@ -4,6 +4,9 @@ open Lwt.Infix
 open CI_utils
 open CI_utils.Infix
 
+let acme_challenge_dir = "/var/run/datakit/acme-challenge"
+(* Any token files placed here (e.g. by certbot) will be served at ".well-known/acme-challenge/..." *)
+
 module Wm = CI_web_utils.Wm
 module Rd = Webmachine.Rd
 
@@ -239,6 +242,11 @@ let mime_type uri =
   | "png"   -> Some "image/png"
   | _       -> None
 
+let acme_challenge =
+  let url_safe_b64 = Str.regexp "^[=-_A-Za-z0-9]+$" in
+  let mime_type _ = Some "application/jose+json" in
+  fun () -> new CI_web_utils.static ~valid:url_safe_b64 ~mime_type acme_challenge_dir
+
 let routes ~logs ~ci ~server ~dashboards =
   let t = { logs; ci; server; dashboards } in
   [
@@ -267,6 +275,8 @@ let routes ~logs ~ci ~server ~dashboards =
     ("error/:id",       fun () -> new error t);
     (* Reporting *)
     ("metrics",         fun () -> new metrics t);
+    (* certbot *)
+    (".well-known/acme-challenge/:file", acme_challenge);
     (* Static resources *)
     (":dir/:name",      fun () -> new CI_web_utils.static_crunch ~mime_type CI_static.read);
   ]
