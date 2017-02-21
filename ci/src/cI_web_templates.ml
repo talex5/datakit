@@ -43,7 +43,7 @@ let state_repo_url t fmt =
   | None -> Error.(uri_path no_state_repo)
 
 let status_history_url t target =
-  state_repo_url t "commits/%s" (CI_target.status_branch_v target)
+  state_repo_url t "commits/%s" (CI_target.status_branch (CI_target.of_v target))
 
 let log_commit_url t commit =
   state_repo_url t "commit/%s" commit
@@ -705,7 +705,11 @@ let target_repo = function
   | `PR pr -> PR.repo pr
   | `Ref r -> Ref.repo r
 
-let commit_page ~commit targets t =
+let map_or_none f = function
+  | [] -> [li [pcdata "(none)"]]
+  | xs -> List.map f xs
+
+let commit_page ~commit ~archived_targets targets t =
   let title = Fmt.strf "Commit %s" commit in
   let target_link target =
     li [
@@ -714,9 +718,20 @@ let commit_page ~commit targets t =
       ]
     ]
   in
+  let archive_target_link (target, commit) =
+    let commit = CI_utils.DK.Commit.id commit in
+    li [
+      a ~a:[a_href (Fmt.strf "%s?history=%s" (CI_target.path target) commit)] [
+        pcdata (Fmt.to_to_string CI_target.pp target)
+      ]
+    ]
+  in
   page title Nav.Home [
-    p [pcdata (Fmt.strf "Builds of commit %s" commit)];
-    ul (List.map target_link targets);
+    h2 [pcdata (Fmt.strf "Commit %s" commit)];
+    p [pcdata "Current builds:"];
+    ul (map_or_none target_link targets);
+    p [pcdata "Archived builds:"];
+    ul (map_or_none archive_target_link archived_targets);
   ] t
 
 let target_page_url = CI_target.path_v

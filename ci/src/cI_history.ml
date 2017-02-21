@@ -6,6 +6,10 @@ module DK = CI_utils.DK
 
 let metadata_commit_path = Datakit_path.of_string_exn "metadata-commit"
 
+let index_branch = "commit-index"
+
+let ( / ) = Datakit_path.Infix.( / )
+
 module State = struct
   type t = {
     parents : string list;
@@ -73,7 +77,7 @@ let load commit =
   Lwt.return { State.parents; jobs }
 
 let lookup t dk target =
-  let branch_name = CI_target.status_branch_v target in
+  let branch_name = CI_target.status_branch target in
   match Hashtbl.find t.cache branch_name with
   | t -> Lwt_mutex.with_lock t.lock (fun () -> Lwt.return t)    (* Ensures we've finished loading *)
   | exception Not_found ->
@@ -98,7 +102,11 @@ let diff _id prev next =
   | Some _, None -> Some `Delete
   | None, None -> assert false
 
-let record t dk input jobs =
+let index_dir ~repo ~hash =
+  let {Datakit_github.Repo.user; repo} = repo in
+  Datakit_path.of_steps_exn [user; repo; "commit"; hash]
+
+let record t dk ~src_hash input jobs =
   Lwt_mutex.with_lock t.lock @@ fun () ->
   let state = t.commit |> CI_utils.default State.empty in
   let patch = String.Map.merge diff state.State.jobs jobs in
@@ -152,7 +160,47 @@ let record t dk input jobs =
     >>*= fun parents ->
     let state = { State.jobs; parents } in
     t.commit <- Some state;
-    Lwt.return ()
+    (* todo: Transaction.commit should return the new commit object directly *)
+    DK.Branch.head branch >>*= function
+    | None -> assert false
+    | Some state_commit ->
+      let state_commit = DK.Commit.id state_commit in
+      let target = CI_target.of_status_branch t.branch_name in
+      let repo = CI_target.repo target in
+      let dir = index_dir ~repo ~hash:src_hash in
+      let data = Cstruct.of_string state_commit in
+      let sub_name = Fmt.to_to_string CI_target.Branch_escape.pp_sub target in
+      let message = Fmt.strf "Update %s:%s -> %s" sub_name src_hash state_commit in
+      DK.branch dk index_branch >>*= fun index ->
+      DK.Branch.with_transaction index (fun tr ->
+          DK.Transaction.make_dirs tr dir >>*= fun () ->
+          DK.Transaction.create_file tr (dir / sub_name) data >>*= fun () ->
+          DK.Transaction.commit tr ~message
+        )
+      >>*= Lwt.return
   )
 
 let head t = t.commit
+
+let builds_of_commit dk c =
+  DK.branch dk index_branch >>*= fun branch ->
+  DK.Branch.head branch >>*= function
+  | None -> Lwt.return CI_target.Map.empty
+  | Some head ->
+    let tree = DK.Commit.tree head in
+    let open Datakit_github in
+    let {Commit.repo; hash} = c in
+    let dir = index_dir ~repo ~hash in
+    DK.Tree.read_dir tree dir >>= function
+    | Error `Does_not_exist -> Lwt.return CI_target.Map.empty
+    | Error x -> failwith (Fmt.to_to_string DK.pp_error x)
+    | Ok branches ->
+      branches |> Lwt_list.map_p (fun b ->
+          DK.Tree.read_file tree (dir / b) >>*= fun data ->
+          let state_commit = DK.commit dk (Cstruct.to_string data) in
+          match CI_target.Branch_escape.parse_sub ~repo b with
+          | Some target -> Lwt.return (target, state_commit)
+          | None -> CI_utils.failf "Invalid branch name in index: %S" b
+        )
+      >|= CI_target.Map.of_list
+

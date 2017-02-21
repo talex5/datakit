@@ -82,6 +82,7 @@ val tags_page :
 
 val commit_page :
   commit:string ->
+  archived_targets:(CI_target.t * CI_utils.DK.Commit.t) list ->
   CI_target.t list ->
   t ->
   page

@@ -27,14 +27,18 @@ end
 
 val create : unit -> t
 
-val lookup : t -> DK.t -> CI_target.v -> target Lwt.t
+val lookup : t -> DK.t -> CI_target.t -> target Lwt.t
 
-val record : target -> DK.t -> DK.Commit.t -> string CI_output.t String.Map.t -> unit Lwt.t
-(** [record target dk input jobs] records the new output of each job in [jobs]
-    as a new commit of [target], and records that it was calculated using metadata snapshot [input]. *)
+val record : target -> DK.t -> src_hash:string -> DK.Commit.t -> string CI_output.t String.Map.t -> unit Lwt.t
+(** [record target dk ~src_hash input jobs] records the new output of each job in [jobs]
+    as a new commit of [target], and records that it was calculated using metadata snapshot [input].
+    The commit index of [src_hash] is updated to include the new result (for [builds_of_commit]). *)
 
 val load : DK.Commit.t -> State.t Lwt.t
 (** [load commit] loads a saved state from the database. *)
 
 val head : target -> State.t option
 (** [head t] is the current state of [t]. *)
+
+val builds_of_commit : DK.t -> Datakit_github.Commit.t -> DK.Commit.t CI_target.Map.t Lwt.t
+(** [builds_of_commit dk c] finds the latest build results for source commit [c]. *)
