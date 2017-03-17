@@ -8,7 +8,7 @@ val equal : t -> t -> bool
 val arg : t Cmdliner.Arg.converter
 val repo : t -> Repo.t
 val id : t -> [`PR of int | `Ref of string list ]
-val path: t -> string
+val path: ?test:string -> t -> string
 
 module Map: Map.S with type key = t
 module Set: Set.S with type elt = t

@@ -85,9 +85,15 @@ let escape_ref path =
 let ref_path { Repo.user; repo} r =
     Fmt.strf "/%s/%s/ref/%s" user repo (escape_ref r)
 
-let path = function
-  | `PR (repo, pr) -> pr_path repo pr
-  | `Ref (repo, r) -> ref_path repo r
+let path ?test target =
+  let path =
+    match target with
+    | `PR (repo, pr) -> pr_path repo pr
+    | `Ref (repo, r) -> ref_path repo r
+  in
+  match test with
+  | None -> path
+  | Some test -> path ^ "?test=" ^ Uri.pct_encode ~component:`Query_value test
 
 type v = [ `PR of PR.t | `Ref of Ref.t ]
 

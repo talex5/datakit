@@ -360,7 +360,9 @@ let set_status t tr job =
     let commit = CI_target.head target.v in
     let { Repo.user; repo } = CI_target.repo_v target.v in
     let hash = Commit.hash commit in
-    let url = Uri.with_path t.web_ui (Fmt.strf "/%s/%s/commit/%s" user repo hash) in
+    let url =
+      let test = Uri.pct_encode ~component:`Query_value job.name in
+      Uri.with_path t.web_ui (Fmt.strf "/%s/%s/commit/%s?test=%s" user repo hash test) in
     Log.debug (fun f -> f "Set state of %a: %s = %a"
                   Commit.pp_hash hash
                   job.name

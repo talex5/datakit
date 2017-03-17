@@ -547,7 +547,7 @@ module LogScore : sig
   type log = [`Live of CI_live_log.t | `Saved of CI_output.saved]
 
   val create : unit -> t
-  val update : t -> log -> unit
+  val update : selected_job:bool -> t -> log -> unit
   val best : t -> log option
 end = struct
   type score = int
@@ -557,16 +557,18 @@ end = struct
   let ok = 1
   let pending = 2
   let failed = 3
+  let selected_bonus = 10
 
   let create () = ref None
 
-  let update (best:t) (x:log) =
+  let update ~selected_job (best:t) (x:log) =
     let new_score =
       match x with
       | `Live _ -> pending
       | `Saved {CI_output.failed = true; _} -> failed
       | `Saved _ -> ok
     in
+    let new_score = if selected_job then new_score + selected_bonus else new_score in
     match !best with
     | None -> best := Some (new_score, x)
     | Some (score, _) when score < new_score -> best := Some (new_score, x)
@@ -584,14 +586,15 @@ let logs_frame_link = function
   | `Live live_log -> Printf.sprintf "/log/live/%s" (encode (CI_live_log.branch live_log))
   | `Saved {CI_output.branch; commit; _} -> saved_log_frame_link ~branch ~commit
 
-let score_logs ~best = function
+let score_logs ?selected ~best = function
   | (_name, None) -> ()
-  | (_name, Some state) ->
+  | (job_name, Some state) ->
+    let selected_job = (selected = Some job_name) in
     let open CI_output in
     let rec aux = function
       | Empty -> ()
-      | Live live_log -> LogScore.update best (`Live live_log);
-      | Saved saved -> LogScore.update best (`Saved saved);
+      | Live live_log -> LogScore.update ~selected_job best (`Live live_log);
+      | Saved saved -> LogScore.update ~selected_job best (`Saved saved);
       | Pair (a, b) -> aux a; aux b
     in
     aux (CI_output.logs state)
@@ -675,13 +678,17 @@ let logs ~csrf_token ~page_url ~selected state =
     let descr = CI_output.descr state in
     items @ [p [status_flag status; pcdata descr]]
 
-let job_row ~csrf_token ~page_url ~best_log (job_name, state) =
+let job_row ?selected ~csrf_token ~page_url ~best_log (job_name, state) =
   let output =
     match state with
     | None -> (Error (`Pending "(new)"), CI_output.Empty)
     | Some state -> state
   in
-  tr [
+  let attrs =
+    if selected = Some job_name then [a_class ["selected-job"]]
+    else []
+  in
+  tr ~a:attrs [
     th [pcdata job_name];
     td [status (CI_output.status output)];
     td (
@@ -697,11 +704,11 @@ let map_or_none f = function
   | [] -> [li [pcdata "(none)"]]
   | xs -> List.map f xs
 
-let commit_page ~commit ~archived_targets targets t =
+let commit_page ?test ~commit ~archived_targets targets t =
   let title = Fmt.strf "Commit %s" commit in
   let target_link target =
     li [
-      a ~a:[a_href (CI_target.path target)] [
+      a ~a:[a_href (CI_target.path ?test target)] [
         pcdata (Fmt.to_to_string CI_target.pp target)
       ]
     ]
@@ -709,7 +716,7 @@ let commit_page ~commit ~archived_targets targets t =
   let archive_target_link (target, commit) =
     let commit = CI_utils.DK.Commit.id commit in
     li [
-      a ~a:[a_href (Fmt.strf "%s?history=%s" (CI_target.path target) commit)] [
+      a ~a:[a_href (Fmt.strf "%s?history=%s" (CI_target.path ?test target) commit)] [
         pcdata (Fmt.to_to_string CI_target.pp target)
       ]
     ]
@@ -745,7 +752,7 @@ let history_nav t target state =
   | [x] -> p (pcdata "Previous state: " :: state_link x :: links)
   | xs -> p (pcdata "Previous states: " :: (intersperse (pcdata ", ") (List.map state_link xs)) @ links)
 
-let target_page ~csrf_token ?(title="(no title)") ~(target:CI_target.t) state t =
+let target_page ?test ~csrf_token ?(title="(no title)") ~(target:CI_target.t) state t =
   let jobs = CI_history.State.jobs state |> String.Map.bindings |> List.map (fun (name, s) -> name, Some s) in
   let title = target_title ~title target in
   let repo = CI_target.repo target in
@@ -754,11 +761,11 @@ let target_page ~csrf_token ?(title="(no title)") ~(target:CI_target.t) state t 
   let page_url = target_page_url target in
   let best_log =
     let best = LogScore.create () in
-    List.iter (score_logs ~best) jobs;
+    List.iter (score_logs ?selected:test ~best) jobs;
     LogScore.best best
   in
   let state_summary = [
-    table ~a:[a_class ["table"; "table-bordered"; "results"]] (List.map (job_row ~csrf_token ~page_url ~best_log) jobs)
+    table ~a:[a_class ["table"; "table-bordered"; "results"]] (List.map (job_row ?selected:test ~csrf_token ~page_url ~best_log) jobs)
   ] in
   let nav =
     match target with
